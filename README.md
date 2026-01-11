@@ -1,4 +1,4 @@
-# Netskope to DLP Migration Script
+# Jamf Pro - DLP Migration Tool
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-10.13+-brightgreen.svg)](https://www.apple.com/macos/)
