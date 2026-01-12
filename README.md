@@ -42,6 +42,8 @@
 
 ## 🚀 Quick Start
 
+> ⚠️ **Important:** Before running, you MUST customize the script for your DLP solution. See [Configuration Required](#️-configuration-required) below.
+
 ### 1. Clone the Repository
 
 ```bash
@@ -49,13 +51,28 @@ git clone https://github.com/CaputoDavide93/Jamf-DLP-Migration.git
 cd Jamf-DLP-Migration
 ```
 
-### 2. Make Script Executable
+### 2. Customize for Your DLP Solution
+
+Edit `migrate_to_dlp.sh` and update these placeholder values:
+
+```bash
+# DLP paths - CUSTOMIZE THESE FOR YOUR DLP SOLUTION
+DLP_PATHS=(
+    "/Applications/YourDLP.app"        # ← Change to your DLP app path
+    "/Library/Application Support/YourDLP"  # ← Change to your DLP support path
+)
+
+# Package identifiers for receipt checking
+DLP_PKGS=("yourdlp" "com.yourdlp")     # ← Change to your DLP package IDs
+```
+
+### 3. Make Script Executable
 
 ```bash
 chmod +x migrate_to_dlp.sh
 ```
 
-### 3. Run Migration
+### 4. Run Migration
 
 ```bash
 sudo ./migrate_to_dlp.sh
