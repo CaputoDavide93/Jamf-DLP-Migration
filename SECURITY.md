@@ -54,7 +54,7 @@ JAMF_PASS="${JAMF_API_PASSWORD}"
 - [ ] Jamf API credentials stored securely
 - [ ] Script run with `sudo` only when necessary
 - [ ] Logs reviewed for sensitive data exposure
-- [ ] Test in dry-run mode before production
+- [ ] Test on a single non-production machine before wide deployment
 
 ---
 

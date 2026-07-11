@@ -2,7 +2,7 @@
 
 # 🔐 Jamf DLP Migration
 
-> **Automated migration tool for transitioning from Jamf Behavioral Framework to Jamf DLP**
+**Jamf-deployed script that removes Netskope from macOS and installs your target DLP solution in its place**
 
 ![Shell](https://img.shields.io/badge/Shell-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
 ![Jamf](https://img.shields.io/badge/Jamf-6C2C91?style=for-the-badge&logo=jamf&logoColor=white)
@@ -15,34 +15,41 @@
 
 ---
 
+> ⚠️ **Destructive migration — there is NO automatic rollback.**
+> This script permanently kills Netskope processes, unloads its launchd items and kernel extensions, deletes its files, preferences, and package receipts for every user, and disables its proxy/DNS configuration. It takes **no backup** and has **no restore or `--rollback` mode**.
+> **Test on a single machine first**, and have a Jamf policy / MDM re-scoping ready to reinstall Netskope if you need to back out.
+
+---
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| 🔄 **Automated Migration** | One-click transition from Behavioral Framework to DLP |
-| 🔍 **Pre-Flight Checks** | Validates system requirements before migration |
-| 📊 **Progress Tracking** | Visual feedback during migration process |
-| 🛡️ **Rollback Support** | Safe rollback if migration fails |
-| 📝 **Detailed Logging** | Comprehensive logs for troubleshooting |
-| 🔐 **Policy Preservation** | Maintains existing security policies |
+| | Feature | What it does |
+|---|---------|--------------|
+| 🔍 | **Netskope detection** | Finds Netskope via filesystem paths and `pkgutil` package receipts |
+| 🧹 | **Complete removal** | Kills processes, unloads launchd items and kexts, deletes apps, support files, preferences, and receipts for every user |
+| 🌐 | **Network cleanup** | Disables Netskope web/secure/PAC proxies, removes its DNS resolver files, flags VPN configs for manual removal |
+| 📦 | **DLP install via Jamf** | Runs `jamf recon` + `jamf manage`, then `jamf policy -id <ID>`, and verifies the DLP appears on disk |
+| ♻️ | **Idempotent** | Exits 0 immediately when the DLP is already installed and Netskope is gone |
+| 🩺 | **Health checks** | Five post-migration checks: removal, install, leftover processes, disk usage, launchd leftovers |
+| 📝 | **Logging** | Timestamped, level-filtered (DEBUG→ERROR) output to stdout — the Jamf policy log captures it — plus an end-of-run error/warning summary |
+| 🚧 | **Non-blocking errors** | Removal/install failures are logged and the run continues to the summary instead of dying mid-migration |
 
 ---
 
 ## 📋 Prerequisites
 
-| Requirement | Version |
-|-------------|---------|
-| macOS | 11.0+ |
-| Jamf Pro | 10.35+ |
-| Behavioral Framework | Installed |
-| Admin Rights | Required |
+| Requirement | Notes |
+|-------------|-------|
+| macOS device enrolled in Jamf Pro | The `jamf` binary must be available |
+| A Jamf policy that installs your DLP | Referenced by policy ID (script parameter `$4`) |
+| Root / sudo | The script exits immediately without it |
+| Bash 3.2+ | Compatible with the macOS system Bash |
 
 ---
 
 ## 🚀 Quick Start
 
-> ⚠️ **Important:** Before running, you MUST customize the script for your DLP solution. See [Configuration Required](#️-configuration-required) below.
+> ⚠️ **Important:** Before running, you MUST customize the script for your DLP solution — see below.
 
 ### 1. Clone the Repository
 
@@ -66,60 +73,47 @@ DLP_PATHS=(
 DLP_PKGS=("yourdlp" "com.yourdlp")     # ← Change to your DLP package IDs
 ```
 
-### 3. Make Script Executable
+These are how the script decides whether the DLP is installed — if they don't
+match your product, installation verification will always fail.
+
+### 3. Deploy via Jamf (recommended)
+
+Upload the script to Jamf Pro and scope it as a policy, setting:
+
+- **Parameter 4** — the policy ID that installs your DLP (default: `269`)
+- **Parameter 5** — log verbosity: `DEBUG`, `INFO`, `WARN`, or `ERROR` (default: `INFO`)
+
+### 4. Or Run Manually on a Test Machine
 
 ```bash
 chmod +x migrate_to_dlp.sh
-```
-
-### 4. Run Migration
-
-```bash
-sudo ./migrate_to_dlp.sh
+# Args 1-3 are Jamf's mount-point/computer/user placeholders - pass empty strings
+sudo ./migrate_to_dlp.sh "" "" "" 269 DEBUG
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Environment Variables
+### Jamf Script Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `$4` | Jamf policy ID that installs the target DLP | `269` |
+| `$5` | Log verbosity (`DEBUG`, `INFO`, `WARN`, `ERROR`) | `INFO` |
+
+### In-Script Settings
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `JAMF_URL` | Jamf Pro server URL | - |
-| `DLP_PROFILE_ID` | DLP configuration profile ID | - |
-| `LOG_LEVEL` | Logging verbosity | `INFO` |
-| `DRY_RUN` | Test mode without changes | `false` |
+| `DLP_PATHS` / `DLP_PKGS` | How the target DLP is detected — **customize these** | placeholders |
+| `NETSKOPE_PATHS` / `NETSKOPE_PKGS` | How Netskope is detected | Netskope defaults |
+| `MAX_WAIT_REMOVAL` | Seconds to wait for removal to verify | `60` |
+| `MAX_WAIT_INSTALL` | Seconds to wait for the DLP install to verify | `90` |
+| `CHECK_INTERVAL` | Seconds between verification checks | `3` |
 
-### Example Configuration
-
-```bash
-export JAMF_URL="https://your-jamf.jamfcloud.com"
-export DLP_PROFILE_ID="123"
-export LOG_LEVEL="DEBUG"
-```
-
----
-
-## 📖 Usage
-
-### Basic Migration
-
-```bash
-sudo ./migrate_to_dlp.sh
-```
-
-### Dry Run (Test Mode)
-
-```bash
-DRY_RUN=true sudo ./migrate_to_dlp.sh
-```
-
-### With Verbose Logging
-
-```bash
-LOG_LEVEL=DEBUG sudo ./migrate_to_dlp.sh
-```
+There are no environment variables and no dry-run mode — the script acts as
+soon as it runs.
 
 ---
 
@@ -127,25 +121,35 @@ LOG_LEVEL=DEBUG sudo ./migrate_to_dlp.sh
 
 ```mermaid
 graph TD
-    A[Start Migration] --> B[Pre-Flight Checks]
-    B --> C{System Valid?}
-    C -->|Yes| D[Backup Current Config]
-    C -->|No| E[Exit with Error]
-    D --> F[Remove Behavioral Framework]
-    F --> G[Install DLP Components]
-    G --> H[Apply Policies]
-    H --> I[Verify Installation]
-    I --> J[Migration Complete]
+    A[🚀 Start] --> B{Running as root?}
+    B -->|No| X[❌ Exit 1]
+    B -->|Yes| C[📋 Pre-migration status check]
+    C -->|DLP installed & no Netskope| Z[✅ Nothing to do — exit 0]
+    C -->|Migration needed| D[🧹 Remove Netskope]
+    D --> E[📦 Install DLP via Jamf policy]
+    E --> F[🩺 Health checks]
+    F --> G[📝 Summary + exit code]
 ```
 
 ### Migration Steps
 
-1. **Pre-Flight Checks** - Validates macOS version, Jamf enrollment, and admin rights
-2. **Configuration Backup** - Creates backup of current Behavioral Framework settings
-3. **Framework Removal** - Safely removes Behavioral Framework components
-4. **DLP Installation** - Installs and configures Jamf DLP
-5. **Policy Migration** - Transfers existing policies to DLP format
-6. **Verification** - Confirms successful installation
+1. **Pre-flight** — requires root, logs system info (macOS, console user, Jamf version), and checks the current Netskope/DLP state; exits early if nothing to do
+2. **Stop processes** — `pkill -9` on all Netskope processes
+3. **Unload launchd items** — system daemons and agents
+4. **Unload kernel extensions** — unloads and deletes Netskope kexts, rebuilds the kext cache (may require reboot)
+5. **System extensions** — detects them and warns; macOS requires manual removal or a reboot for these
+6. **File cleanup** — apps, support files, launchd plists, system and per-user preferences, caches, saved state, and logs
+7. **Network cleanup** — disables Netskope web/secure/PAC proxies, removes its `/etc/resolver` files, flags VPN configs for manual removal
+8. **Forget receipts** — `pkgutil --forget` for all Netskope package IDs, then re-verifies removal (up to 60 s)
+9. **Install DLP** — `jamf recon`, `jamf manage`, then `jamf policy -id <ID>`, verifying the DLP appears on disk (up to 90 s)
+10. **Health check & summary** — five checks, error/warning recap, final status
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | DLP installed (including "already in desired state" and "installed but Netskope remnants remain") |
+| `1` | DLP installation failed — manual intervention required |
 
 ---
 
@@ -154,41 +158,53 @@ graph TD
 ### Common Issues
 
 <details>
-<summary>❌ Permission Denied</summary>
+<summary>❌ "This script must be run as root or with sudo"</summary>
 
 ```bash
-# Solution: Run with sudo
-sudo ./migrate_to_dlp.sh
+sudo ./migrate_to_dlp.sh "" "" "" 269 INFO
 ```
 </details>
 
 <details>
-<summary>❌ Jamf Not Enrolled</summary>
+<summary>❌ Jamf Not Enrolled / policy fails</summary>
 
 ```bash
-# Verify Jamf enrollment
+# Verify Jamf enrollment and connectivity
 sudo jamf policy
+
+# Verify the DLP install policy ID passed as parameter 4 exists and is scoped
 ```
 </details>
 
 <details>
-<summary>❌ Migration Failed</summary>
+<summary>⚠ Netskope remnants still detected</summary>
 
-```bash
-# Check logs
-cat /var/log/jamf_dlp_migration.log
+System/network extensions and VPN configurations can survive the cleanup —
+macOS requires user approval or a reboot to remove them:
 
-# Rollback if needed
-sudo ./migrate_to_dlp.sh --rollback
-```
+- Reboot the machine, then re-run the script (it is idempotent)
+- Check **System Settings → Privacy & Security → Extensions** and
+  **System Settings → Network → VPN** for leftovers
+</details>
+
+<details>
+<summary>❌ "DLP not detected" after the policy ran</summary>
+
+The script verifies the install against `DLP_PATHS` and `DLP_PKGS`. If those
+placeholders were not customized to your actual DLP product, verification
+always fails even when the install succeeded.
 </details>
 
 ### Log Locations
 
+All script output goes to **stdout**, so Jamf captures it in the policy
+execution log (Jamf Pro → the policy → Logs). No local log file is written.
+
 | Log | Path |
 |-----|------|
-| Migration Log | `/var/log/jamf_dlp_migration.log` |
-| Jamf Log | `/var/log/jamf.log` |
+| Script output (Jamf deployment) | Jamf Pro policy log for the machine |
+| Script output (manual run) | Your terminal — `sudo ./migrate_to_dlp.sh ... 2>&1 \| tee migration.log` |
+| Jamf client log | `/var/log/jamf.log` |
 
 ---
 

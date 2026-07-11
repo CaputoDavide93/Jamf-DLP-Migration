@@ -40,8 +40,10 @@ Before submitting:
 # Run shellcheck
 shellcheck migrate_to_dlp.sh
 
-# Test in dry-run mode
-DRY_RUN=true sudo ./migrate_to_dlp.sh
+# Validate syntax
+bash -n migrate_to_dlp.sh
+
+# Test on a single non-production machine (there is no dry-run mode)
 ```
 
 ## 🐛 Bug Reports
